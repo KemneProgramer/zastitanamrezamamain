@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import Base, engine, SessionLocal
@@ -23,6 +23,7 @@ def home():
     return {"message": "Thread app backend is running!"}
 
 
+
 @app.post("/posts", response_model=schemas.PostResponse)
 def create_post(post: schemas.PostCreate, db: Session = Depends(get_db)):
     new_post = models.Post(content=post.content)
@@ -35,16 +36,32 @@ def create_post(post: schemas.PostCreate, db: Session = Depends(get_db)):
 @app.get("/posts", response_model=list[schemas.PostResponse])
 def get_posts(db: Session = Depends(get_db)):
     posts = db.query(models.Post).order_by(models.Post.id.desc()).all()
-    # Load comments for each post
+    # Ensure comments load
     for post in posts:
         post.comments
     return posts
 
 
+@app.delete("/posts/{post_id}")
+def delete_post(post_id: int, db: Session = Depends(get_db)):
+    post = db.query(models.Post).filter(models.Post.id == post_id).first()
+
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    db.delete(post)
+    db.commit()
+    return {"message": "Post deleted successfully"}
+
 
 
 @app.post("/comments", response_model=schemas.CommentResponse)
 def create_comment(comment: schemas.CommentCreate, db: Session = Depends(get_db)):
+    # Ensure referenced post exists
+    post = db.query(models.Post).filter(models.Post.id == comment.post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
     new_comment = models.Comment(
         content=comment.content,
         post_id=comment.post_id
@@ -54,9 +71,16 @@ def create_comment(comment: schemas.CommentCreate, db: Session = Depends(get_db)
     db.refresh(new_comment)
     return new_comment
 
+
 @app.get("/posts/{post_id}/comments", response_model=list[schemas.CommentResponse])
 def get_comments(post_id: int, db: Session = Depends(get_db)):
+    # Check post exists
+    post = db.query(models.Post).filter(models.Post.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
     return db.query(models.Comment).filter(models.Comment.post_id == post_id).all()
+
 
 
 if __name__ == "__main__":
