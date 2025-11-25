@@ -3,3 +3,5 @@ threads.db
 misc.xml
 modules.xml
 profiles_settings.xml
+__pycache__/
+.env
